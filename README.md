@@ -1,13 +1,3 @@
----
-title: EvalForge
-emoji: ⚡
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # EvalForge: A Self-Hostable LLM Evaluation and Observability Platform
 
 ## About The Project
