@@ -47,7 +47,11 @@ def run_evaluation(run_id: int):
             run = db.query(EvalRun).get(run_id)
             if run:
                 run.status = "failed"
-                run.error_message = str(e)[:500]
+                err_str = str(e)
+                if any(token in err_str.lower() for token in ["429", "rate_limit", "rate limit", "quota", "resource_exhausted", "resource exhausted"]):
+                    run.error_message = "Daily API limit reached — resets in 24 hours. Try again tomorrow."
+                else:
+                    run.error_message = err_str[:500]
                 run.completed_at = datetime.now(timezone.utc)
                 db.commit()
         except Exception:
@@ -110,13 +114,19 @@ def _execute_run(db: Session, run_id: int):
 
         except Exception as e:
             logger.error(f"Case {case.id} failed: {e}")
+            err_str = str(e)
+            if any(token in err_str.lower() for token in ["429", "rate_limit", "rate limit", "quota", "resource_exhausted", "resource exhausted"]):
+                friendly_error = "Daily API limit reached — resets in 24 hours. Try again tomorrow."
+            else:
+                friendly_error = f"[ERROR] {err_str[:300]}"
+            
             # Store a failed result rather than crashing the whole run
             failed_result = EvalResult(
                 run_id=run.id,
                 case_id=case.id,
-                actual_output=f"[ERROR] {str(e)[:300]}",
+                actual_output=friendly_error,
                 latency_ms=0,
-                judge_reasoning=f"Evaluation failed: {str(e)[:300]}",
+                judge_reasoning=f"Evaluation failed: {friendly_error}",
                 output_hash=make_cache_key(run.model_id, run.system_prompt, case.input_text),
             )
             db.add(failed_result)

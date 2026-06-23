@@ -32,6 +32,7 @@ class GeminiJudgeProvider:
         1. Clean JSON (ideal case)
         2. JSON wrapped in ```json ... ``` markdown fences
         3. JSON with preamble text before the first {
+        4. Fallback manual regex extraction for malformed JSON with unescaped quotes
         """
         # Try direct parse first
         text = text.strip()
@@ -55,6 +56,32 @@ class GeminiJudgeProvider:
                 return json.loads(brace_match.group(0))
             except json.JSONDecodeError:
                 pass
+
+        # Fallback regex extraction for nested schema when unescaped quotes break json.loads
+        try:
+            scores_dict = {}
+            for key in ["correctness", "relevance", "coherence", "tone", "hallucination_resistance"]:
+                val_match = re.search(rf'"{key}"\s*:\s*(\d+)', text)
+                if val_match:
+                    scores_dict[key] = int(val_match.group(1))
+
+            reasoning_dict = {}
+            for key in ["correctness", "relevance", "coherence", "tone", "hallucination_resistance"]:
+                val_match = re.search(rf'"{key}"\s*:\s*"(.*)"\s*(?:,|\n|}})', text)
+                if val_match:
+                    reasoning_dict[key] = val_match.group(1)
+
+            devil_match = re.search(r'"devil_advocate"\s*:\s*"(.*)"\s*(?:,|\n|}})', text)
+            devil_advocate = devil_match.group(1) if devil_match else "N/A"
+
+            if scores_dict:
+                return {
+                    "devil_advocate": devil_advocate,
+                    "reasoning": reasoning_dict,
+                    "scores": scores_dict
+                }
+        except Exception:
+            pass
 
         raise ValueError(f"Could not extract valid JSON from Gemini response: {text[:200]}")
 
@@ -83,24 +110,43 @@ class GeminiJudgeProvider:
         if expected_output and expected_output.strip():
             expected_section = f"\nEXPECTED OUTPUT (reference answer):\n{expected_output}\n"
 
-        judge_prompt = f"""You are an expert LLM output evaluator. Your job is to objectively score a model's response.
+        judge_prompt = f"""You are a strict, calibrated evaluator. Your bias is toward lower scores.
+A score of 9-10 means the output is nearly perfect with no room for improvement.
+Most outputs score between 4 and 7.
 
-INPUT (the question/prompt given to the model):
-{input_text}
-{expected_section}
-ACTUAL OUTPUT (the model's response to evaluate):
-{actual_output}
+You MUST follow this exact JSON structure — reasoning BEFORE scores:
 
-Score the ACTUAL OUTPUT on these 5 dimensions, each from 1 to 10:
+{{
+  "devil_advocate": "<one sentence: what is the strongest argument that this output is wrong or incomplete>",
+  "reasoning": {{
+    "correctness": "<evaluate factual accuracy against reference — cite specific errors if any>",
+    "relevance": "<does it answer exactly what was asked, nothing more, nothing less>",
+    "coherence": "<logical flow, structure, clarity>",
+    "tone": "<appropriateness for context>",
+    "hallucination_resistance": "<any invented facts, numbers, or claims not in the input>"
+  }},
+  "scores": {{
+    "correctness": <1-10>,
+    "relevance": <1-10>,
+    "coherence": <1-10>,
+    "tone": <1-10>,
+    "hallucination_resistance": <1-10>
+  }}
+}}
 
-1. correctness: Does the output accurately and completely answer the question? (1=completely wrong, 10=perfect)
-2. relevance: Is the output on-topic and directly addresses the input? (1=off-topic, 10=perfectly relevant)
-3. coherence: Is the output well-structured, logical, and easy to follow? (1=incoherent, 10=perfectly structured)
-4. tone: Is the tone appropriate — professional, clear, neither too casual nor too stiff? (1=inappropriate, 10=perfect tone)
-5. hallucination_resistance: Does the output avoid fabricating facts or making unsupported claims? (1=full of hallucinations, 10=fully grounded)
+Scoring anchors (apply to ALL dimensions):
+1-3: Clearly wrong, missing, or harmful
+4-5: Partially meets criteria, notable gaps
+6-7: Adequate, meets basic criteria, minor issues
+8:   Good, only small improvements possible
+9-10: Reserved for outputs that could not realistically be improved
 
-Respond with ONLY a JSON object, no other text:
-{{"correctness": <int>, "relevance": <int>, "coherence": <int>, "tone": <int>, "hallucination_resistance": <int>, "reasoning": "<2-3 sentence explanation of your scores>"}}"""
+Input: {input_text}
+Reference answer: {expected_output or "None provided"}
+Model output: {actual_output}
+
+Return ONLY the JSON. No preamble.
+IMPORTANT: If you quote strings from the model output in your reasoning or devil's advocate fields, you MUST use single quotes (e.g., 'mutable') to avoid breaking JSON formatting."""
 
         max_retries = 3
         last_error = None
@@ -114,20 +160,30 @@ Respond with ONLY a JSON object, no other text:
                     contents=judge_prompt,
                 )
                 raw_text = response.text or ""
-                scores = self._extract_json(raw_text)
+                parsed = self._extract_json(raw_text)
 
-                # Validate all required fields exist and are in range
+                # Extract and validate scores
+                scores_dict = parsed.get("scores", {})
+                final_scores = {}
                 required = ["correctness", "relevance", "coherence", "tone", "hallucination_resistance"]
                 for field in required:
-                    val = scores.get(field)
+                    val = scores_dict.get(field)
                     if val is None:
-                        raise ValueError(f"Missing field: {field}")
-                    scores[field] = max(1, min(10, int(val)))
+                        raise ValueError(f"Missing score field: {field}")
+                    final_scores[field] = max(1, min(10, int(val)))
 
-                if "reasoning" not in scores:
-                    scores["reasoning"] = "No reasoning provided by judge."
+                # Extract and compile reasoning
+                reasoning_dict = parsed.get("reasoning", {})
+                reasoning_lines = []
+                for field in required:
+                    field_reason = reasoning_dict.get(field, "No detail provided.")
+                    reasoning_lines.append(f"- **{field.replace('_', ' ').capitalize()}**: {field_reason}")
 
-                return scores
+                devil_advocate = parsed.get("devil_advocate", "")
+                full_reasoning = f"**Devil's Advocate:** {devil_advocate}\n\n" + "\n".join(reasoning_lines)
+                final_scores["reasoning"] = full_reasoning
+
+                return final_scores
 
             except Exception as e:
                 last_error = e
