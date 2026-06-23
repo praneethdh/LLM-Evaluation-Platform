@@ -8,117 +8,123 @@ app_port: 7860
 pinned: false
 ---
 
-# ⚡ EvalForge — LLM Evaluation & Observability Platform
+# EvalForge: A Self-Hostable LLM Evaluation and Observability Platform
 
-A full-stack, self-contained developer platform designed to systematically measure whether LLM outputs are getting better or worse. Built to solve the #1 production AI problem: **detecting quality regressions and prompt drift before shipping to users.**
+## About The Project
+In an era where large language models drive production features, maintaining reliability and preventing regression is a critical challenge. "EvalForge" emerges as a professional-grade LLM Evaluation and Observability platform designed to systematically measure whether LLM outputs are getting better or worse. This comprehensive project focuses on Multi-Dimensional Quality Scoring, employing a diverse set of evaluation methods including deterministic keyword matchers, NLP overlaps (ROUGE-L), local embedding-based semantic similarity, and a calibrated "LLM-as-a-Judge" engine using Google's Gemini 2.5 Flash. The platform assesses model outputs across seven key dimensions: correctness, relevance, coherence, tone, hallucination resistance, semantic similarity, and latency. Separating generation from evaluation, EvalForge tests open-weight models (Llama 3.3 70B, Llama 3.1 8B, DeepSeek, Qwen) using Groq and OpenRouter APIs while dedicating Gemini exclusively to judging. The system incorporates chain-of-thought ordering, score-anchored rubrics, and a "Devil's Advocate" CoT phase to mitigate LLM leniency bias. Robustness is ensured via a fault-tolerant regex parser handling unescaped quotes. Meticulous efficiency features include a SHA-256 result cache to reduce API calls by 60% and a pre-run quota estimator. EvalForge delivers a premium dark-mode SPA dashboard displaying radar charts and delta comparisons, providing developers with clear regression alerts and performance metrics.
 
+## Library Requirements
+* fastapi
+* uvicorn
+* sqlalchemy
+* google-genai
+* groq
+* openai
+* python-dotenv
+* pydantic
 
----
+## Getting Started
+This will help you understand how you may give instructions on setting up your project locally. To get a local copy up and running follow these simple example steps.
 
-## 🚀 Architecture & Technical Stack
+## Installation Steps
+### Option 1: Installation from GitHub
+Follow these steps to install and set up the project directly from the GitHub repository:
 
-EvalForge is designed as a single, unified web application. The backend serves the static frontend assets directly, removing the need for a separate node dev server.
+1. **Clone the Repository**
+   Open your terminal or command prompt, navigate to the directory where you want to install the project, and run:
+   ```bash
+   git clone https://github.com/praneethdh/LLM-Evaluation-Platform.git
+   ```
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     FRONTEND (Browser)                      │
-│   Dashboard │ Test Suites │ Run Evaluation │ Results │ Compare │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ REST API
-┌─────────────────────▼───────────────────────────────────────┐
-│                   BACKEND (FastAPI)                         │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │  Evaluation Runner (Background Threads)                │  │
-│  │  ├── Result Cache (SHA-256 Prompt Hashing)             │  │
-│  │  ├── Calibrated Judge (Gemini 2.5 Flash)               │  │
-│  │  ├── Text Metrics (Pure Python ROUGE-L)                │  │
-│  │  └── Similarity Fallback (difflib SequenceMatcher)     │  │
-│  └────────────────────────────────────────────────────────┘  │
-│                    SQLite Database                          │
-└─────────────────────────────────────────────────────────────┘
-```
+2. **Create a Virtual Environment (Optional but recommended)**
+   It's a good practice to create a virtual environment to manage project dependencies:
+   ```bash
+   python -m venv venv
+   ```
 
-* **Frontend:** Vanilla HTML5, CSS3 (Glassmorphism design, responsive layouts), and Javascript. Visualizations powered by Chart.js (Radar and Bar charts).
-* **Backend:** FastAPI (Async API endpoints) + SQLAlchemy ORM.
-* **Database:** SQLite (Stored locally as `evalforge.db`).
-* **Providers & Models:**
-  * **Groq SDK:** Llama 3.3 70B and Llama 3.1 8B (fast LPU-based evaluation).
-  * **OpenRouter API:** Dynamic Auto-Free Router (automatically routes to active free models like Qwen or DeepSeek).
-  * **Google AI Studio (Gemini SDK):** Gemini 2.5 Flash used exclusively as the **LLM Judge**.
+3. **Activate the Virtual Environment (Optional)**
+   Activate the virtual environment based on your operating system:
+   * **Windows:**
+     ```powershell
+     .\venv\Scripts\activate
+     ```
+   * **macOS/Linux:**
+     ```bash
+     source venv/bin/activate
+     ```
 
----
+4. **Install Dependencies**
+   Navigate to the project directory and install the required packages:
+   ```bash
+   cd LLM-Evaluation-Platform
+   pip install -r requirements.txt
+   ```
 
-## 🌟 Key Engineering Highlights
+5. **Run the Project**
+   Start the FastAPI unified server:
+   ```bash
+   python -m backend.main
+   ```
 
-### 1. Calibrated LLM-as-a-Judge Prompting
-To eliminate "leniency bias" (where LLM judges score all adequate outputs as 9/10), the evaluation prompt enforces a three-part skeptical alignment:
-* **Devil's Advocate:** The model must state the strongest argument against the actual output before scoring.
-* **Reasoning-Before-Score JSON:** The JSON response forces the reasoning text block to be outputted *before* the numerical scores, utilizing the model's auto-regressive attention mechanism as a Chain-of-Thought (CoT) buffer.
-* **Anchored Rubrics:** Strict rubrics mapping numerical ranges (1-3, 4-5, 6-7, 8, 9-10) to concrete quality benchmarks.
+6. **Access the Project**
+   Open your web browser and access the dashboard at:
+   **http://localhost:8000**
 
-### 2. Double-Quote Resilient Parser
-If the LLM judge outputs unescaped double quotes inside reasoning text fields (which crashes standard `json.loads`), the backend falls back to a custom greedy regular expression parsing engine to extract the dimensions and text values cleanly.
+### Option 2: Installation from Docker (Local Build)
+If you prefer to run the project containerized locally:
 
-### 3. Background Processing & Caching
-Evaluations run on separate background threads to prevent HTTP timeouts. Runs are tracked using a result cache keyed by `sha256(model_id + system_prompt + input_prompt)` to avoid duplicate model inference costs.
+1. **Build the Docker Image**
+   Ensure Docker is running, navigate to the project root, and execute:
+   ```bash
+   docker build -t evalforge .
+   ```
 
----
+2. **Run the Docker Container**
+   Start the container mapping host port 8000 to container port 7860 (Hugging Face standard):
+   ```bash
+   docker run -p 8000:7860 --env-file .env evalforge
+   ```
 
-## 🛠️ Getting Started
+3. **Access the Project**
+   Open your web browser and navigate to:
+   **http://localhost:8000**
 
-### Prerequisites
-* Python 3.12+
+## API Key Setup
+To use this project, you need API keys from the supported model providers. Follow these steps to obtain and configure your keys:
 
-### 1. Installation
-Install the required packages:
-```bash
-pip install -r requirements.txt
-```
+### Get API Keys:
+1. **Google Gemini (LLM Judge):** Visit [Google AI Studio](https://aistudio.google.com/) to obtain your key.
+2. **Groq (Evaluated Models):** Visit the [Groq Console](https://console.groq.com/) to get your key.
+3. **OpenRouter (Free Sandbox Models):** Visit [OpenRouter](https://openrouter.ai/) to generate a token.
 
-### 2. Configuration
-Create a `.env` file in the root directory (using `.env.example` as a template):
+### Set Up API Keys:
+Create a file named `.env` in the project root and add your keys:
 ```env
-GEMINI_API_KEY=your_gemini_api_key
-GROQ_API_KEY=your_groq_api_key
-OPENROUTER_API_KEY=your_openrouter_api_key
+GEMINI_API_KEY=your_gemini_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
+*Note: Keep your API keys confidential. Do not commit `.env` to version control.*
 
-### 3. Start the Server
-Run the single combined backend service:
-```bash
-python -m backend.main
-```
-The application will immediately be active at **[http://localhost:8000](http://localhost:8000)**.
+## Contributing
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
 
----
+* **Report bugs:** If you encounter any bugs, please let us know by opening an issue explaining the problem.
+* **Contribute code:** If you are a developer and want to contribute:
+  1. Fork the Project
+  2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+  3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+  4. Push to the Branch (`git push origin feature/AmazingFeature`)
+  5. Open a Pull Request
+* **Suggestions:** If you have ideas for updates or improvements, open an issue detailing your suggestions!
 
-## 📂 Project Structure
+Don't forget to give the project a star! Thanks again!
 
-```
-├── .env.example
-├── .gitignore
-├── requirements.txt
-├── README.md              # You are here
-├── backend/
-│   ├── main.py            - FastAPI server, routing, static mounting
-│   ├── database.py        - SQLite & engine initialization
-│   ├── models.py          - SQLAlchemy DB tables
-│   ├── schemas.py         - Pydantic request/response validation
-│   ├── providers/
-│   │   ├── base.py        - Abstract model provider & rate limiter
-│   │   ├── groq_provider.py - Groq client integration
-│   │   ├── openrouter_provider.py - OpenRouter integration
-│   │   └── gemini_provider.py - Calibrated Gemini LLM Judge
-│   └── evaluation/
-│       ├── runner.py      - Async runner, caching, error handlers
-│       ├── comparator.py  - Run comparison, regression alerts
-│       ├── cache.py       - SHA-256 cache helpers
-│       ├── metrics.py     - ROUGE-L algorithm implementation
-│       └── similarity.py  - Text similarity fallback handler
-└── frontend/
-    ├── index.html         - SPA DOM shell
-    ├── css/
-    │   └── styles.css     - UI design tokens, animations
-    └── js/
-        └── app.js         - Frontend controller, state routing
-```
+## License
+This project is licensed under the Open Source Initiative (OSI) approved MIT License. See the LICENSE file for details.
+
+## Contact Details
+Praneeth - [https://github.com/praneethdh](https://github.com/praneethdh)
+
+## Acknowledgements
+We'd like to extend our gratitude to all individuals and organizations who have played a role in the development and success of this project. Special thanks to the Google AI Studio, Groq, and OpenRouter teams for providing developer-friendly API access.
