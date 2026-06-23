@@ -20,6 +20,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create a non-root user for security (required by Hugging Face Spaces)
 RUN useradd -m -u 1000 user
 ENV HOME=/home/user
+
+# Pre-create app folder and ensure write permissions for the user
+RUN mkdir -p $HOME/app && chown -R user:1000 $HOME
+
 WORKDIR $HOME/app
 
 # Copy application files and grant ownership to the user
