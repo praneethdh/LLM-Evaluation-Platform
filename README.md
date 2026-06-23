@@ -1,76 +1,124 @@
-# Supply Chain Disruption Prediction System (India)
-React 19 FastAPI Three.js Hugging Face Spaces
+---
+title: EvalForge
+emoji: ⚡
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
 
-An advanced, "next level" multi-model AI system designed to predict and mitigate supply chain disruptions across the Indian logistics network, featuring a high-performance 3D animated frontend.
+# ⚡ EvalForge — LLM Evaluation & Observability Platform
 
-🔗 Live Application Link
-🚀 Hugging Face Spaces Demo: [Launch Full-Stack 3D Application (Click Here)](https://huggingface.co/spaces)
-(The application is fully hosted using Docker, bringing together the React 19 frontend and FastAPI backend).
+A full-stack, self-contained developer platform designed to systematically measure whether LLM outputs are getting better or worse. Built to solve the #1 production AI problem: **detecting quality regressions and prompt drift before shipping to users.**
 
-🚀 Architecture
-This project has been upgraded from a Streamlit application to a modern Full-Stack AI Application:
 
-* **Frontend:** Built with React 19, Three.js (via React Three Fiber), and GSAP. It provides a sleek, interactive 3D visualization of the supply chain network across 15 major Indian cities.
-* **Backend:** A robust FastAPI service that handles model inference, weather data fetching, and risk assessment.
-* **AI Models:**
-  * **Isolation Forest:** Anomaly detection for weather patterns.
-  * **LSTM (Deep Learning):** Captures temporal dependencies in disruption sequences.
-  * **XGBoost:** The final classifier for precise risk scoring.
+---
 
-🌟 Key Features
-* **3D Interactive Globe/Map:** Stylized 3D visualization of logistics nodes with animated route arcs.
-* **GSAP Powered Animations:** Fluid UI transitions and "next level" visual feedback.
-* **Real-time Weather Intelligence:** Integrates live 7-day weather forecasts via Open-Meteo API.
-* **Explainable AI:** Detailed breakdown of "Risk Causes" for every shipment prediction.
-* **Modern UI:** Glassmorphism-inspired design using Tailwind CSS.
+## 🚀 Architecture & Technical Stack
 
-🛠️ Getting Started
+EvalForge is designed as a single, unified web application. The backend serves the static frontend assets directly, removing the need for a separate node dev server.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     FRONTEND (Browser)                      │
+│   Dashboard │ Test Suites │ Run Evaluation │ Results │ Compare │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ REST API
+┌─────────────────────▼───────────────────────────────────────┐
+│                   BACKEND (FastAPI)                         │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Evaluation Runner (Background Threads)                │  │
+│  │  ├── Result Cache (SHA-256 Prompt Hashing)             │  │
+│  │  ├── Calibrated Judge (Gemini 2.5 Flash)               │  │
+│  │  ├── Text Metrics (Pure Python ROUGE-L)                │  │
+│  │  └── Similarity Fallback (difflib SequenceMatcher)     │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                    SQLite Database                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+* **Frontend:** Vanilla HTML5, CSS3 (Glassmorphism design, responsive layouts), and Javascript. Visualizations powered by Chart.js (Radar and Bar charts).
+* **Backend:** FastAPI (Async API endpoints) + SQLAlchemy ORM.
+* **Database:** SQLite (Stored locally as `evalforge.db`).
+* **Providers & Models:**
+  * **Groq SDK:** Llama 3.3 70B and Llama 3.1 8B (fast LPU-based evaluation).
+  * **OpenRouter API:** Dynamic Auto-Free Router (automatically routes to active free models like Qwen or DeepSeek).
+  * **Google AI Studio (Gemini SDK):** Gemini 2.5 Flash used exclusively as the **LLM Judge**.
+
+---
+
+## 🌟 Key Engineering Highlights
+
+### 1. Calibrated LLM-as-a-Judge Prompting
+To eliminate "leniency bias" (where LLM judges score all adequate outputs as 9/10), the evaluation prompt enforces a three-part skeptical alignment:
+* **Devil's Advocate:** The model must state the strongest argument against the actual output before scoring.
+* **Reasoning-Before-Score JSON:** The JSON response forces the reasoning text block to be outputted *before* the numerical scores, utilizing the model's auto-regressive attention mechanism as a Chain-of-Thought (CoT) buffer.
+* **Anchored Rubrics:** Strict rubrics mapping numerical ranges (1-3, 4-5, 6-7, 8, 9-10) to concrete quality benchmarks.
+
+### 2. Double-Quote Resilient Parser
+If the LLM judge outputs unescaped double quotes inside reasoning text fields (which crashes standard `json.loads`), the backend falls back to a custom greedy regular expression parsing engine to extract the dimensions and text values cleanly.
+
+### 3. Background Processing & Caching
+Evaluations run on separate background threads to prevent HTTP timeouts. Runs are tracked using a result cache keyed by `sha256(model_id + system_prompt + input_prompt)` to avoid duplicate model inference costs.
+
+---
+
+## 🛠️ Getting Started
 
 ### Prerequisites
 * Python 3.12+
-* Node.js 18+
-* npm
 
-### 1. Backend Setup
+### 1. Installation
+Install the required packages:
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Start the FastAPI server
-python server.py
 ```
-The API will be available at `http://localhost:8000`.
 
-### 2. Frontend Setup
+### 2. Configuration
+Create a `.env` file in the root directory (using `.env.example` as a template):
+```env
+GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+```
+
+### 3. Start the Server
+Run the single combined backend service:
 ```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
+python -m backend.main
 ```
-The application will be available at `http://localhost:5173`.
+The application will immediately be active at **[http://localhost:8000](http://localhost:8000)**.
 
-📂 Project Structure
+---
+
+## 📂 Project Structure
+
 ```
-├── frontend/             # React + Three.js + GSAP Frontend
-│   ├── src/components/   # 3D Scene and UI Panels
-│   ├── src/services/     # API Client
-│   └── src/types/        # TypeScript Definitions
-├── datasets/             # Historical shipment, news, and supplier data
-├── models/               # Saved .pkl and .h5 model files & encoders
-├── server.py             # FastAPI Backend
-├── app.py                # Legacy Streamlit Interface (Reference)
-├── requirements.txt      # Project dependencies
-└── README.md             # You are here
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── README.md              # You are here
+├── backend/
+│   ├── main.py            - FastAPI server, routing, static mounting
+│   ├── database.py        - SQLite & engine initialization
+│   ├── models.py          - SQLAlchemy DB tables
+│   ├── schemas.py         - Pydantic request/response validation
+│   ├── providers/
+│   │   ├── base.py        - Abstract model provider & rate limiter
+│   │   ├── groq_provider.py - Groq client integration
+│   │   ├── openrouter_provider.py - OpenRouter integration
+│   │   └── gemini_provider.py - Calibrated Gemini LLM Judge
+│   └── evaluation/
+│       ├── runner.py      - Async runner, caching, error handlers
+│       ├── comparator.py  - Run comparison, regression alerts
+│       ├── cache.py       - SHA-256 cache helpers
+│       ├── metrics.py     - ROUGE-L algorithm implementation
+│       └── similarity.py  - Text similarity fallback handler
+└── frontend/
+    ├── index.html         - SPA DOM shell
+    ├── css/
+    │   └── styles.css     - UI design tokens, animations
+    └── js/
+        └── app.js         - Frontend controller, state routing
 ```
-
-📈 System Objectives
-* **Proactive Visibility:** Move from reactive to predictive logistics.
-* **Risk Mitigation:** Identify high-risk shipments before they leave the origin.
-* **Optimized Planning:** Adjust buffer stocks and delivery promises based on data-driven confidence scores.
-
-📄 License
-Distributed under the MIT License.

@@ -554,10 +554,14 @@ def _suite_to_response(suite: TestSuite) -> TestSuiteResponse:
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    port = int(os.getenv("PORT", 8000))
+    # Disable reload in production/cloud environments
+    is_prod = os.getenv("PROD", "false").lower() == "true"
     uvicorn.run(
         "backend.main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True,
+        port=port,
+        reload=not is_prod,
         log_level="info",
     )
