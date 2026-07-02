@@ -1,3 +1,15 @@
+---
+title: EvalForge
+emoji: 🔬
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: true
+license: mit
+short_description: LLM Evaluation & Observability Platform
+---
+
 # EvalForge: A Self-Hostable LLM Evaluation and Observability Platform
 
 ## About The Project
